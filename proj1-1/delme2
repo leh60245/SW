@@ -1,0 +1,8 @@
+drwx------ 2 os os    4096  3월 16 12:56 __MACOSX
+-rw-rw-r-- 1 os os    6952  3월 30 17:30 tsh.o
+-rw-rw-rw- 1 os os   11248  3월 30 17:19 tsh.c
+-rw-rw-rw- 1 os os 2739828  3월 16 12:56 proj1.pdf
+-rw-rw-rw- 1 os os     408  3월 16 12:56 Makefile
+-rwxr--r-- 1 os os       0  3월 30 17:50 delme
+-rwxrwxr-x 1 os os   13296  3월 30 17:30 tsh
+total 2720

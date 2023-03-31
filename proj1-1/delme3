@@ -1,0 +1,11 @@
+for (int
+for (int
+int argc
+int background;
+int fd[2];
+int file_descriptor;
+int len;
+int main(void)
+int pipe_idx
+int validate
+int validate
