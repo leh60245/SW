@@ -35,6 +35,11 @@
  * 수정 내용
  * 표준 입출력 리다이렉션을 처리하는 기능 리팩토링
  * cmdexec 함수의 이름을 execute_cmd 로 변경
+ * -------------------------------------------------------------------------------
+ * 수정 날짜 : 2023/04/06
+ * 수정 내용
+ * 명령어 입력 도중 \을 통해서 줄바꿈 후 추가로 입력받는 기능 구현
+ * >> 기호를 통한 리다이렉션 기능 구현
  */
 
 #include <stdio.h>
@@ -77,7 +82,29 @@ static void redirect_stdin(char *file) {
  */
 static void redirect_stdout(char *file) {
 	/* file을 읽고 쓰기 모두 가능하도록 새로 생성 또는 재생성하고 fd에 파일 디스크립터 저장 */
-    int fd = open(file, O_RDWR | O_CREAT | O_TRUNC, 0644);
+	int fd = open(file, O_RDWR | O_CREAT | O_TRUNC, 0644);
+
+	/* 파일 열기에 실패한 경우 에러 메시지를 출력하고 프로그램을 강제 종료한다. */
+    if (fd == -1) {
+        perror("open");
+        exit(EXIT_FAILURE);
+    }
+
+	/*
+	 * 위에서 열었던 파일의 파일 디스크립터(fd)를
+	 * 표준 출력 파일 디스크립터(STDOUT_FILENO)에 복제하고,
+	 * 사용이 끝난 파일 디스크립터(fd)를 닫는다.
+	 */
+    dup2(fd, STDOUT_FILENO);
+    close(fd);
+}
+
+/*
+ * redirect_stdout_append - >>을 통해 기존 파일에 표준 출력을 추가 작성한다.
+ */
+static void redirect_stdout_append(char *file) {
+	/* file을 읽고 쓰기 모두 가능하도록 새로 생성 또는 재생성하고 fd에 파일 디스크립터 저장 */
+    int fd = open(file, O_RDWR | O_CREAT | O_APPEND, 0644);
 
 	/* 파일 열기에 실패한 경우 에러 메시지를 출력하고 프로그램을 강제 종료한다. */
     if (fd == -1) {
@@ -105,14 +132,14 @@ static void handle_io_redirection(char *argv[]) {
 	int out_redir_idx = -1;		/* '>' 기호의 인덱스를 저장하는 변수 */
 
 	/*
- 	 * 명령인자 배열에 '<' 기호와 '>' 기호가 있는지 확인하고 인덱스를 저장한다.
+ 	 * 명령인자 배열에 '<' 기호, '>' 기호, ">>" 기호가 있는지 확인하고 인덱스를 저장한다.
 	 * 명령에 같은 리다이렉션 기호가 여러 개 있는 경우 
 	 * 가장 먼저 나온 리다이렉션 기호의 인덱스를 저장한다.
  	 */
 	for (int i = 0; argv[i] != NULL; i++) {
 		if (in_redir_idx != -1 && out_redir_idx != -1) break;
-		if (!strcmp(argv[i], "<")) in_redir_idx = i;
-		else if (!strcmp(argv[i], ">")) out_redir_idx = i;
+		if (in_redir_idx == -1 && !strcmp(argv[i], "<")) in_redir_idx = i;
+		else if (out_redir_idx == -1 && (!strcmp(argv[i], ">") || !strcmp(argv[i], ">>"))) out_redir_idx = i;
 	}
 
 	/* 
@@ -126,13 +153,17 @@ static void handle_io_redirection(char *argv[]) {
 	}
 
 	/*
-	 * '>' 기호가 존재하는 경우
+	 * '>' 기호 또는 ">>"가 존재하는 경우
 	 * 출력 리다이렉션 기호를 명령 인자 배열에서 제거하고,
 	 * 파일에 출력을 저장받도록 리다이렉션 처리한다.
 	 */
 	if (out_redir_idx != -1) {
+		if (strcmp(argv[out_redir_idx], ">>") == 0) {
+			redirect_stdout_append(argv[out_redir_idx + 1]);
+		} else {
+			redirect_stdout(argv[out_redir_idx + 1]);
+		}
 		argv[out_redir_idx] = NULL;
-		redirect_stdout(argv[out_redir_idx + 1]);
 	}
 }
 
@@ -295,18 +326,21 @@ int main(void) {
             perror("read");
             exit(EXIT_FAILURE);
         }
-
+		
+		/*
+		 * 명령어 입력 도중 \을 통해 줄바꿈 후 추가 입력을 받을 수 있도록 한다.
+		 */
 		while (cmd[len - 2] == '\\') {
 			cmd[len - 2] = ' ';
 			cmd[len - 1] = ' ';
 			len += read(STDIN_FILENO, &cmd[len], MAX_LINE - len);	
 		}
+
         cmd[--len] = '\0';
         if (len == 0) {
             continue;
 		}
 
-		// printf("cmd = %s\n", cmd);
         /*
          * 종료 명령이면 루프를 빠져나간다.
          */
