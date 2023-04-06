@@ -61,7 +61,7 @@ static void redirect_stdin(char *file) {
 	if (fd == -1) {				
 		perror("open");
 		exit(EXIT_FAILURE);		
-    }
+	}
 
 	/*
 	 * 위에서 열었던 파일의 파일 디스크립터(fd)를
@@ -201,6 +201,9 @@ static void execute_cmd(char *cmd) {
 	/* 명령어를 파싱하여 명령인자들을 argv에 저장한다. */
 	parse_cmd(cmd, argv);
 
+	for (int i = 0; argv[i] != NULL; i++)
+		printf("argv[%d] = %s\n", i, argv[i]);
+
 	/*
 	 * 명령인자의 끝에 도달할 때까지 파이프 기호가 있는지 검사하고,
 	 * 파이프 기호가 있으면 자식 프로세스를 생성하여 앞의 명령어를 처리하고 실행한다.
@@ -292,9 +295,18 @@ int main(void) {
             perror("read");
             exit(EXIT_FAILURE);
         }
+
+		while (cmd[len - 2] == '\\') {
+			cmd[len - 2] = ' ';
+			cmd[len - 1] = ' ';
+			len += read(STDIN_FILENO, &cmd[len], MAX_LINE - len);	
+		}
         cmd[--len] = '\0';
-        if (len == 0)
+        if (len == 0) {
             continue;
+		}
+
+		// printf("cmd = %s\n", cmd);
         /*
          * 종료 명령이면 루프를 빠져나간다.
          */
