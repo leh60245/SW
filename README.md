@@ -7,5 +7,4 @@
 ## 파일 내용
 - **tsh.c** 기본 명령어를 수행하는 작은 쉘.
 - **Makefile** 컴파일을 도와주는 스크립트
-- **Developer Velocity.** See local changes in seconds. Changes to JavaScript code can be live reloaded without rebuilding the native app.
-- **Portability.** Reuse code across iOS, Android, and [other platforms][p].
+- **test** tsh.c가 수행하는 명령어를 검증하는 테스트 스크립트
