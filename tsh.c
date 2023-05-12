@@ -40,6 +40,19 @@
  * 수정 내용
  * 명령어 입력 도중 \을 통해서 줄바꿈 후 추가로 입력받는 기능 구현
  * >> 기호를 통한 리다이렉션 기능 구현
+ * -------------------------------------------------------------------------------
+ * 수정 날짜 : 2023/04/27
+ * 수정 내용
+ * 현재 작업 디렉토리를 변경하는 cd 명령어를 처리하는 기능 구현
+ * -------------------------------------------------------------------------------
+ * 수정 날짜 : 2023/05/03
+ * 수정 내용
+ * 에러 가능한 명령어들에 에러 메시지 추가
+ * -------------------------------------------------------------------------------
+ * 수정 날짜 : 2023/05/12                                                   
+ * 수정 내용
+ * 코드 리팩토링 완료 
+ * -------------------------------------------------------------------------------
  */
 
 #include <stdio.h>
@@ -73,7 +86,10 @@ static void redirect_stdin(char *file) {
 	 * 표준 입력 파일 디스크립터(STDIN_FILENO)에 복제하고,
 	 * 사용이 끝난 파일 디스크립터(fd)를 닫는다.
 	 */
-	dup2(fd, STDIN_FILENO);
+	if (dup2(fd, STDIN_FILENO) == -1) {
+		perror("dup2");
+		exit(EXIT_FAILURE);
+	}
    	close(fd);
 }
 
@@ -95,7 +111,10 @@ static void redirect_stdout(char *file) {
 	 * 표준 출력 파일 디스크립터(STDOUT_FILENO)에 복제하고,
 	 * 사용이 끝난 파일 디스크립터(fd)를 닫는다.
 	 */
-    dup2(fd, STDOUT_FILENO);
+    if (dup2(fd, STDOUT_FILENO) == -1) {
+		perror("dup2");
+		exit(EXIT_FAILURE);
+	}
     close(fd);
 }
 
@@ -117,7 +136,10 @@ static void redirect_stdout_append(char *file) {
 	 * 표준 출력 파일 디스크립터(STDOUT_FILENO)에 복제하고,
 	 * 사용이 끝난 파일 디스크립터(fd)를 닫는다.
 	 */
-    dup2(fd, STDOUT_FILENO);
+    if (dup2(fd, STDOUT_FILENO) == -1) {
+		perror("dup2");
+		exit(EXIT_FAILURE);
+	}
     close(fd);
 }
 
@@ -223,17 +245,10 @@ static void parse_cmd(char *cmd, char *argv[]) {
 /*
  * execute_cmd - 명령어를 파싱해서 파이프와 표준 입출력 리다이렉션을 고려해서 실행한다.
  */
-static void execute_cmd(char *cmd) {
-    char *argv[MAX_LINE/2+1];   /* 명령어 인자를 저장하기 위한 배열 */
+static void execute_cmd(char *argv[]) {
 	int fd[2];					/* 파일 디스크립션 */	
 	pid_t pid;					/* 자식 프로세스 아이디 */
 	int exec_idx = 0;			/* 실행할 명령의 인덱스를 저장할 변수 */
-
-	/* 명령어를 파싱하여 명령인자들을 argv에 저장한다. */
-	parse_cmd(cmd, argv);
-
-	for (int i = 0; argv[i] != NULL; i++)
-		printf("argv[%d] = %s\n", i, argv[i]);
 
 	/*
 	 * 명령인자의 끝에 도달할 때까지 파이프 기호가 있는지 검사하고,
@@ -265,7 +280,10 @@ static void execute_cmd(char *cmd) {
 		 */
 		if (pid == 0) {
 			close(fd[READ_END]);
-			dup2(fd[WRITE_END], STDOUT_FILENO);
+			if (dup2(fd[WRITE_END], STDOUT_FILENO) == -1) {
+				perror("dup2");
+				exit(EXIT_FAILURE);
+			}
 			close(fd[WRITE_END]);
 			argv[i] = NULL;
 			handle_io_redirection(&argv[exec_idx]);
@@ -281,7 +299,10 @@ static void execute_cmd(char *cmd) {
 		 */
 		else {
 			close(fd[WRITE_END]);
-			dup2(fd[READ_END], STDIN_FILENO);
+			if (dup2(fd[READ_END], STDIN_FILENO) == -1) {
+				perror("dup2");
+				exit(EXIT_FAILURE);
+			}
 			close(fd[READ_END]);
 			exec_idx = i + 1;
 		}
@@ -300,8 +321,9 @@ int main(void) {
     char cmd[MAX_LINE+1];       /* 명령어를 저장하기 위한 버퍼 */
     int len;                    /* 입력된 명령어의 길이 */
     pid_t pid;                  /* 자식 프로세스 아이디 */
-    int background;             /* 백그라운드 실행 유무 */
-    
+    int background;             /* 백그라운드 실행 유무 */ 
+    char *argv[MAX_LINE/2+1];   /* 명령어 인자를 저장하기 위한 배열 */
+
     /*
      * 종료 명령인 "exit"이 입력될 때까지 루프를 무한 반복한다.
      */
@@ -312,10 +334,20 @@ int main(void) {
         pid = waitpid(-1, NULL, WNOHANG);
         if (pid > 0)
             printf("[%d] + done\n", pid);
+
+		/* 현재 작업 디렉토리의 위치를 출력한다 */
+		char cwd[1024];
+		if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        	fprintf(stderr, "Failed to get current working directory\n");
+			exit(EXIT_FAILURE);
+    	}
+		printf("%s", cwd);
+
+
         /*
          * 셸 프롬프트를 출력한다. 지연 출력을 방지하기 위해 출력버퍼를 강제로 비운다.
          */
-        printf("tsh> "); fflush(stdout);
+        printf(" tsh> "); fflush(stdout);
         /*
          * 표준 입력장치로부터 최대 MAX_LINE까지 명령어를 입력 받는다.
          * 입력된 명령어 끝에 있는 새줄문자를 널문자로 바꿔 C 문자열로 만든다.
@@ -346,6 +378,7 @@ int main(void) {
          */
         if(!strcasecmp(cmd, "exit"))
             break;
+
         /*
          * 백그라운드 명령인지 확인하고, '&' 기호를 삭제한다.
          */
@@ -356,6 +389,20 @@ int main(void) {
         }
         else
             background = 0;
+
+		/*
+		 * cmd를 명령인자배열 argv에 파싱하여 저장하고,
+		 * 명령어가 cd인지 확인하고 cd라면 현재 작업 디렉토리를 변경한다.
+		 */
+		parse_cmd(cmd, argv);
+		if (strcmp(argv[0], "cd") == 0) {
+			if (chdir(argv[1]) == -1) {
+				perror("cd");
+				exit(EXIT_FAILURE);
+			}
+			continue;
+		}
+
         /*
          * 자식 프로세스를 생성하여 입력된 명령어를 실행하게 한다.
          */
@@ -367,7 +414,7 @@ int main(void) {
          * 자식 프로세스는 명령어를 실행하고 종료한다.
          */
         else if (pid == 0) {
-            execute_cmd(cmd);
+            execute_cmd(argv);
             exit(EXIT_SUCCESS);
         }
         /*
